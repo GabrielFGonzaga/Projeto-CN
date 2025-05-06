@@ -1,9 +1,11 @@
 #include <iostream>
 #include <string>
+#include <cmath>
 
 using namespace std;
 
 const int MAX_DIGITOS = 30;
+const int PRECISAO_FRACIONARIA = 10;
 
 int char_para_digito(char c) {
     if (c >= '0' && c <= '9') {
@@ -25,45 +27,103 @@ char digito_para_char(int d) {
     return 'A' + (d - 10);
 }
 
-string converter_base(string numero, int base_origem, int base_destino) {
-    if (base_origem == base_destino) {
-        return numero;
+double converter_para_double(const string& numero, int base) {
+    size_t ponto = numero.find('.');
+    string parteInt;
+    string parteFrac;
+    if (ponto != string::npos) {
+        parteInt = numero.substr(0, ponto);
+        parteFrac = numero.substr(ponto + 1);
+    } else {
+        parteInt = numero;
+        parteFrac = "";
     }
-    if (numero == "0") {
+
+    double valor = 0.0;
+    for (size_t i = 0; i < parteInt.size(); i++) {
+        valor = valor * base + char_para_digito(parteInt[i]);
+    }
+
+    double fator = 1.0;
+    for (size_t i = 0; i < parteFrac.size(); i++) {
+        fator = fator / base;
+        valor = valor + char_para_digito(parteFrac[i]) * fator;
+    }
+
+    return valor;
+}
+
+string converter_de_double(double valor, int base) {
+    long long parteInt = static_cast<long long>(valor);
+    double parteFrac = valor - parteInt;
+
+    string resultadoInt;
+    if (parteInt == 0) {
+        resultadoInt = "0";
+    } else {
+        while (parteInt > 0) {
+            int resto = parteInt % base;
+            resultadoInt = digito_para_char(resto) + resultadoInt;
+            parteInt = parteInt / base;
+        }
+    }
+
+    if (parteFrac <= 0.0) {
+        return resultadoInt;
+    }
+
+    string resultado = resultadoInt + ".";
+    int count = 0;
+    while (count < PRECISAO_FRACIONARIA && parteFrac > 0.0) {
+        parteFrac = parteFrac * base;
+        int dig = static_cast<int>(parteFrac);
+        resultado.push_back(digito_para_char(dig));
+        parteFrac = parteFrac - dig;
+        count = count + 1;
+    }
+
+    return resultado;
+}
+
+string converter_base(string numero, int baseOrigem, int baseDestino) {
+    bool temPonto = (numero.find('.') != string::npos);
+    if (temPonto) {
+        double valor = converter_para_double(numero, baseOrigem);
+        return converter_de_double(valor, baseDestino);
+    }
+
+    if (numero.size() == 1 && numero[0] == '0') {
         return "0";
     }
 
     int tam = numero.size();
-    if (tam > MAX_DIGITOS) {
-        return "Erro: Numero excede o limite de 30 digitos";
-    }
-
     int digitos[MAX_DIGITOS];
     for (int i = 0; i < tam; i++) {
         digitos[i] = char_para_digito(numero[i]);
     }
 
-    string resultado = "";
+    string resultado;
     while (tam > 0) {
         int resto = 0;
-        int novo_tam = 0;
-        int novos_digitos[MAX_DIGITOS];
+        int novoTam = 0;
+        int novosDigitos[MAX_DIGITOS];
 
         for (int i = 0; i < tam; i++) {
-            int valor = resto * base_origem + digitos[i];
-            resto = valor % base_destino;
-            int quociente = valor / base_destino;
-            if (novo_tam > 0 || quociente > 0) {
-                novos_digitos[novo_tam] = quociente;
-                novo_tam++;
+            int valorCalc = resto * baseOrigem + digitos[i];
+            resto = valorCalc % baseDestino;
+            int quociente = valorCalc / baseDestino;
+            if (novoTam > 0 || quociente > 0) {
+                novosDigitos[novoTam] = quociente;
+                novoTam = novoTam + 1;
             }
         }
+
         resultado = digito_para_char(resto) + resultado;
 
-        for (int i = 0; i < novo_tam; i++) {
-            digitos[i] = novos_digitos[i];
+        for (int i = 0; i < novoTam; i++) {
+            digitos[i] = novosDigitos[i];
         }
-        tam = novo_tam;
+        tam = novoTam;
     }
 
     while (resultado.size() > 1 && resultado[0] == '0') {
@@ -72,26 +132,37 @@ string converter_base(string numero, int base_origem, int base_destino) {
     return resultado;
 }
 
-string adicao_em_bases(string n1, int base1, string n2, int base2, int base_destino) {
-    string n1_dest = converter_base(n1, base1, base_destino);
-    string n2_dest = converter_base(n2, base2, base_destino);
+string adicao_em_bases(string n1, int base1, string n2, int base2, int baseDestino) {
+    bool ponto1 = (n1.find('.') != string::npos);
+    bool ponto2 = (n2.find('.') != string::npos);
 
-    string resultado = "";
+    if (ponto1 || ponto2) {
+        double v1 = converter_para_double(n1, base1);
+        double v2 = converter_para_double(n2, base2);
+        return converter_de_double(v1 + v2, baseDestino);
+    }
+
+    string s1 = converter_base(n1, base1, baseDestino);
+    string s2 = converter_base(n2, base2, baseDestino);
+
+    int i = s1.size() - 1;
+    int j = s2.size() - 1;
     int carry = 0;
-    int i = n1_dest.size() - 1;
-    int j = n2_dest.size() - 1;
+    string resultado;
 
-    while (i >= 0 || j >= 0 || carry) {
+    while (i >= 0 || j >= 0 || carry > 0) {
         int soma = carry;
-        if (i >= 0) soma += char_para_digito(n1_dest[i]);
-        if (j >= 0) soma += char_para_digito(n2_dest[j]);
-
-        int digito = soma % base_destino;
-        carry = soma / base_destino;
-
-        resultado = digito_para_char(digito) + resultado;
-
-        i--; j--;
+        if (i >= 0) {
+            soma = soma + char_para_digito(s1[i]);
+            i = i - 1;
+        }
+        if (j >= 0) {
+            soma = soma + char_para_digito(s2[j]);
+            j = j - 1;
+        }
+        int dig = soma % baseDestino;
+        resultado = digito_para_char(dig) + resultado;
+        carry = soma / baseDestino;
     }
 
     while (resultado.size() > 1 && resultado[0] == '0') {
@@ -100,34 +171,42 @@ string adicao_em_bases(string n1, int base1, string n2, int base2, int base_dest
     return resultado;
 }
 
-string multiplicacao_em_bases(string n1, int base1, string n2, int base2, int base_destino) {
-    string n1_dest = converter_base(n1, base1, base_destino);
-    string n2_dest = converter_base(n2, base2, base_destino);
+string multiplicacao_em_bases(string n1, int base1, string n2, int base2, int baseDestino) {
+    bool ponto1 = (n1.find('.') != string::npos);
+    bool ponto2 = (n2.find('.') != string::npos);
+
+    if (ponto1 || ponto2) {
+        double v1 = converter_para_double(n1, base1);
+        double v2 = converter_para_double(n2, base2);
+        return converter_de_double(v1 * v2, baseDestino);
+    }
+
+    string s1 = converter_base(n1, base1, baseDestino);
+    string s2 = converter_base(n2, base2, baseDestino);
 
     string resultado = "0";
-    int tam_n2 = n2_dest.size();
+    int tam2 = s2.size();
 
-    for (int j = tam_n2 - 1; j >= 0; j--) {
-        string parcial = "";
+    for (int j = tam2 - 1; j >= 0; j--) {
+        int d2 = char_para_digito(s2[j]);
         int carry = 0;
-        int d2 = char_para_digito(n2_dest[j]);
+        string parcial;
 
-        for (int i = n1_dest.size() - 1; i >= 0; i--) {
-            int d1 = char_para_digito(n1_dest[i]);
-            int produto = d1 * d2 + carry;
-            int digito = produto % base_destino;
-            carry = produto / base_destino;
-            parcial = digito_para_char(digito) + parcial;
+        for (int i = s1.size() - 1; i >= 0; i--) {
+            int prod = char_para_digito(s1[i]) * d2 + carry;
+            int dig = prod % baseDestino;
+            parcial = digito_para_char(dig) + parcial;
+            carry = prod / baseDestino;
         }
+
         if (carry > 0) {
             parcial = digito_para_char(carry) + parcial;
         }
-
-        for (int k = 0; k < tam_n2 - 1 - j; k++) {
-            parcial += "0";
+        for (int k = 0; k < tam2 - 1 - j; k++) {
+            parcial.push_back('0');
         }
 
-        resultado = adicao_em_bases(resultado, base_destino, parcial, base_destino, base_destino);
+        resultado = adicao_em_bases(resultado, baseDestino, parcial, baseDestino, baseDestino);
     }
 
     while (resultado.size() > 1 && resultado[0] == '0') {
@@ -138,7 +217,7 @@ string multiplicacao_em_bases(string n1, int base1, string n2, int base2, int ba
 
 int main() {
     cout << "-----------------------------------------------------------------------------------------------------------" << endl;
-    cout << "| Calculadora de bases                                                                                    |" << endl;
+    cout << "| Calculadora de base                                                                                    |" << endl;
     cout << "|                                                                                                         |" << endl;
     cout << "| Se deseja converter a base de um numero digite 1 caso deseje realizar uma operacao digite 2:            |" << endl;
     cout << "-----------------------------------------------------------------------------------------------------------" << endl;
@@ -150,7 +229,8 @@ int main() {
 
     if (opcao == "1") {
         string numero;
-        int base_origem, base_destino;
+        int baseOrigem;
+        int baseDestino;
         cout << "| Digite o numero para ser convertido: ";
         getline(cin, numero);
         if (numero.size() > MAX_DIGITOS) {
@@ -158,68 +238,71 @@ int main() {
             return 1;
         }
         cout << "| Base de origem: ";
-        cin >> base_origem;
+        cin >> baseOrigem;
         cout << "| Base de destino: ";
-        cin >> base_destino;
-
-        if (base_origem < 2 || base_destino < 2 || base_origem > 36 || base_destino > 36) {
+        cin >> baseDestino;
+        if (baseOrigem < 2) {
+            
+        } else {
+            
+        }
+        
+        if (baseOrigem < 2 || baseDestino < 2 || baseOrigem > 36 || baseDestino > 36) {
             cout << "| Bases devem estar entre 2 e 36" << endl;
             return 1;
         }
 
-        string resultado = converter_base(numero, base_origem, base_destino);
-        cout << "| Resultado: " << resultado << " na base " << base_destino << endl;
+        string resultado = converter_base(numero, baseOrigem, baseDestino);
+        cout << "| Resultado: " << resultado << " na base " << baseDestino << endl;
     } else if (opcao == "2") {
-        string numero1, numero2;
-        int base1, base2, base_destino;
+        string n1;
+        string n2;
+        int b1;
+        int b2;
+        int bd;
         cout << "| Primeiro numero: ";
-        getline(cin, numero1);
-        if (numero1.size() > MAX_DIGITOS) {
+        getline(cin, n1);
+        if (n1.size() > MAX_DIGITOS) {
             cout << "| O numero tem que ter menos de 30 digitos" << endl;
             return 1;
         }
         cout << "| Base do primeiro numero: ";
-        cin >> base1;
+        cin >> b1;
         cin.ignore();
         cout << "| Segundo numero: ";
-        getline(cin, numero2);
-        if (numero2.size() > MAX_DIGITOS) {
+        getline(cin, n2);
+        if (n2.size() > MAX_DIGITOS) {
             cout << "| O numero tem que ter menos de 30 digitos" << endl;
             return 1;
         }
         cout << "| Base do segundo numero: ";
-        cin >> base2;
+        cin >> b2;
         cout << "| Base de destino para o resultado: ";
-        cin >> base_destino;
-
-        if (base1 < 2 || base2 < 2 || base_destino < 2 ||
-            base1 > 36 || base2 > 36 || base_destino > 36) {
+        cin >> bd;
+        if (b1 < 2 || b2 < 2 || bd < 2 || b1 > 36 || b2 > 36 || bd > 36) {
             cout << "| Bases devem estar entre 2 e 36" << endl;
             return 1;
         }
 
         cout << "|" << endl;
         string operacao;
-        while(operacao != "soma" && operacao != "multiplicacao"){
+        while (operacao != "soma" && operacao != "multiplicacao") {
             cout << "| Escolha a operacao (soma, multiplicacao): ";
             cin >> operacao;
         }
 
         string resultado;
         if (operacao == "soma") {
-            resultado = adicao_em_bases(numero1, base1, numero2, base2, base_destino);
-            cout << "| A soma da " << resultado<< " na base " << base_destino << endl;
+            resultado = adicao_em_bases(n1, b1, n2, b2, bd);
+            cout << "| A soma da " << resultado << " na base " << bd << endl;
+        } else {
+            resultado = multiplicacao_em_bases(n1, b1, n2, b2, bd);
+            cout << "| A multiplicacao da " << resultado << " na base " << bd << endl;
         }
-        else if (operacao == "multiplicacao") {
-            resultado = multiplicacao_em_bases(numero1, base1, numero2, base2, base_destino);
-            cout << "| A multiplicacao da " << resultado<< " na base " << base_destino << endl;
-        }
-
     } else {
         cout << "| Escolha 1 ou 2" << endl;
     }
 
     cout << "-----------------------------------------------------------------------------------------------------------" << endl;
-
     return 0;
 }
